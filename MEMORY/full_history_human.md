@@ -3659,3 +3659,18 @@ has k=1 and k=4 rows (k=4 ties k=3 for the biggest gain). The text names the
 regression and its cause, and the snapshot test checks every k from 1 to 6, so
 a future regression has to be named in the README. The rewriter itself is
 unchanged; carrying the subject into the second half is a separate feature.
+
+## 2026-10-21 — A true/false or text threshold, score or length penalty fails with a clear error (#380)
+
+The refusal threshold, the chunk score the refusal check reads, and the lexical
+reranker's `length_penalty` were only checked for NaN and infinity. Python
+counts `True` as a finite number, so `threshold=True` worked as a 1.0 floor and
+refused a 0.5 answer, a `True` rerank score passed as 1.0, and
+`length_penalty=True` was accepted. A string or `None` failed with a bare
+`TypeError` that named nothing. The threshold's own docstring claimed it matched
+the `fusion.k` and `max_chunks` checks, and both of those refuse `True`. All
+three now raise a `ValueError`, as the telemetry checks have since #303. The
+score error names the chunk and the field. Any other real number is still
+accepted and converted to a plain float. That includes the `numpy.float32`
+scores a sentence-transformers cross-encoder returns, which a first draft of
+this fix wrongly refused. Plain ints and floats behave exactly as before.

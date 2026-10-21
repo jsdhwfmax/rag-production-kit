@@ -34,6 +34,7 @@ harness; see issue #7).
 from __future__ import annotations
 
 import math
+import numbers
 import os
 import re
 from collections.abc import Sequence
@@ -389,15 +390,46 @@ def _top_score(retrieved: Sequence[RetrievalResult]) -> float:
     # first, and `NaN < threshold` is False, so the verdict flipped with input
     # order and a NaN batch answered when it should refuse. `+inf` would pass
     # every threshold too. Fail loud, like `_validate_threshold` (#78).
-    for r, score in zip(retrieved, scores, strict=True):
+    checked: list[float] = []
+    for r, raw in zip(retrieved, scores, strict=True):
+        field = "rerank_score" if r.rerank_score is not None else "fused_score"
+        # The type half (#380): `True` passed the finiteness gate as 1.0 and a
+        # str escaped `math.isfinite` as a bare TypeError naming no chunk. Any
+        # other `numbers.Real` is a score: sentence-transformers'
+        # `CrossEncoder.predict` -- the usual custom reranker -- returns
+        # `numpy.float32`, which is not a `float` subclass. Coerce once, so the
+        # finiteness check, `max()` and the refusal detail all see a float.
+        score = _as_finite_float(raw)
+        if score is None:
+            raise ValueError(
+                f"chunk {r.external_id!r} has a non-numeric {field} ({raw!r}); "
+                "the refusal gate compares it against a numeric threshold"
+            )
         if not math.isfinite(score):
-            field = "rerank_score" if r.rerank_score is not None else "fused_score"
             raise ValueError(
                 f"chunk {r.external_id!r} has a non-finite {field} ({score!r}); "
                 "a NaN/Inf score would poison the refusal gate "
                 "(top < threshold is False for NaN, answering when it should refuse)"
             )
-    return max(scores)
+        checked.append(score)
+    return max(checked)
+
+
+def _as_finite_float(value: object) -> float | None:
+    """Coerce a real, non-bool number to `float`; `None` if it is not one (#380).
+
+    `bool` is a `numbers.Real` but is refused: `True` is a flag, not a 1.0
+    score or threshold. The result may still be NaN/Inf -- the caller owns the
+    finiteness message. A real too large for a double (`10**400`) overflows
+    `float()`; it comes back as `inf` so it fails the caller's finiteness check
+    with a ValueError instead of escaping as a bare OverflowError.
+    """
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        return None
+    try:
+        return float(value)
+    except OverflowError:
+        return math.inf if value > 0 else -math.inf
 
 
 def _ends_with_abbreviation(fragment: str, following: str = "") -> bool:
@@ -744,7 +776,7 @@ def enforce_citations(
     return tuple(seen.values())
 
 
-def _validate_threshold(threshold: float) -> None:
+def _validate_threshold(threshold: float) -> float:
     """Reject a non-finite refusal threshold at the generator boundary.
 
     The gate is `top < threshold`. A `NaN` threshold makes that comparison
@@ -756,9 +788,21 @@ def _validate_threshold(threshold: float) -> None:
     (#75), and `max_chunks` (#41). A *finite* negative threshold stays
     valid: `_top_score` can be genuinely negative (#69), so a negative floor
     is a legitimate "accept low-overlap chunks" configuration.
+
+    And the type half (#380). Two of the three guards named above refuse a
+    `bool`; this one checked finiteness only, so `threshold=True` was a 1.0
+    floor (refusing a 0.5 top score) and `False` a 0.0 one, while a str or
+    `None` escaped `math.isfinite` as a bare TypeError -- the same split
+    #303/#362 closed for telemetry and `PhaseTimings`. Any other
+    `numbers.Real` (a `numpy.float32` read from config, a `Fraction`) is
+    accepted and returned as a `float`, so the gate, `Refusal.used_threshold`
+    and the refusal detail never see the original type.
     """
-    if not math.isfinite(threshold):
-        raise ValueError(f"threshold must be a finite number; got {threshold!r}")
+    value = _as_finite_float(threshold)
+    if value is None or not math.isfinite(value):
+        shown = threshold if value is None else value
+        raise ValueError(f"threshold must be a finite number; got {shown!r}")
+    return value
 
 
 def _refusal(reason: str, detail: str, threshold: float, top: float) -> Refusal:
@@ -793,7 +837,7 @@ class TemplateGenerator:
         *,
         threshold: float = _DEFAULT_THRESHOLD,
     ) -> GeneratedAnswer | Refusal:
-        _validate_threshold(threshold)
+        threshold = _validate_threshold(threshold)
         top = _top_score(retrieved)
         if not retrieved:
             return _refusal("insufficient_context", "no chunks retrieved", threshold, top)
@@ -902,7 +946,7 @@ class AnthropicGenerator:
         *,
         threshold: float = _DEFAULT_THRESHOLD,
     ) -> GeneratedAnswer | Refusal:
-        _validate_threshold(threshold)
+        threshold = _validate_threshold(threshold)
         top = _top_score(retrieved)
         if not retrieved:
             return _refusal("insufficient_context", "no chunks retrieved", threshold, top)
