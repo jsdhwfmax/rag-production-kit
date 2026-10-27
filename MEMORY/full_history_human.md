@@ -3790,3 +3790,17 @@ reads its own sentence back through the splitter, and if any piece would be
 uncited it adds a citation at every place the splitter can cut. Plain prose
 answers are unchanged byte for byte, and a seeded fuzz of 3,000 random markdown
 chunks now gets no refusals.
+
+
+## 2026-10-27 - Issue #405: recognize contracted multi-question queries
+**Contributor:** jsdhwfmax · **Branch:** session/2026-10-27-issue-405
+
+- Normalize straight/curly question contractions for classification while retaining the original sub-query wording. Restrict positive suffixes to WH roots so possessive names such as Will's do not become questions; handle can't/won't and the issue's missing auxiliary/WH prefixes.
+- Added25 public rewriter cases;247 related tests pass. A production-source revert turns15 cases red; four possessive controls also rejected the initial over-broad implementation. Whole-tree Ruff and wheel build pass. Existing18-chunk/8-query benchmark outputs are unchanged at k1..6, so no published result was regenerated.
+- Full Windows collection is blocked by an existing filename-encoding fixture. All19 supplemental runtime failures reproduce with original production source. A separate first-run checkout-guard error came from editing README during tests; validation is now sequenced to avoid that interference.
+
+**Why this work:** common contracted questions were silently excluded from the deterministic multi-hop path.
+
+**Open checks:** keep the external contribution as a draft pending required hosted Linux checks; Postgres, eval-extra and Next.js results are not claimed. The owner's internal session identity and public issue-comment steps were adapted to the actual contributor and the user's PR-only communication authorization.
+
+**Next session:** inspect current-head hosted results and actionable review feedback without rerunning unchanged local proof.

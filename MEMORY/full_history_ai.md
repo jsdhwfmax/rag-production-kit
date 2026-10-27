@@ -4308,3 +4308,26 @@ context_for_next_session:
   - "PY311_FSTRING_CANNOT_HOLD_A_BACKSLASH_in_an_expression"
 followups: []
 ---
+
+
+---
+session: 2026-10-27T05:22Z
+issue: 405
+branch: session/2026-10-27-issue-405
+contributor: jsdhwfmax
+focus: recognize_question_contractions_without_rewriting_sub_queries
+phase: external_draft_prepared
+delta:
+  code_and_test_files_changed: 3
+  tests_added: 25
+  related_suite: "247 passed across all 10 rewriter/retriever/benchmark test modules on Windows, Python3.12"
+  verification: "Initial pristine-source regression:15failed6passed. Review caught possessive Will/Can false-splits:4failed6passed; restrict positive contraction suffixes to WH roots. Complete production revert:15failed10passed. Whole-tree Ruff check/format and wheel build passed."
+  benchmarks: "Existing bench_rewriter18chunks/8questions rerun at k1..6; all query-level outputs/rankings/recalls unchanged. Published README numbers retained."
+context_for_next_session:
+  - "Only the classifier's first word is normalized; original sub-query text/case/apostrophe are preserved. Negative can't/won't map to can/will."
+  - "Windows canonical full collection fails on an unchanged non-UTF8-filename fixture. Supplemental continuation exposed19runtime failures also reproduced with original production source. An initial README checkout-guard error was contributor concurrent-edit interference, not an upstream baseline defect."
+  - "Do not claim whole-suite Windows/Linux, Postgres integration, eval extra or Next.js success; draft awaits hosted required checks. No skips/fixtures/configuration were weakened."
+  - "External contributor retained jsdhwfmax identity. User-authorized communication is PR submission/body/code only; owner-Cowork issue plan/close comments were recorded privately/in PR description instead. No automatic merge requested."
+decisions_made: []
+followups: []
+---
