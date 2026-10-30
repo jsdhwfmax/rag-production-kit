@@ -3804,3 +3804,134 @@ chunks now gets no refusals.
 **Open checks:** keep the external contribution as a draft pending required hosted Linux checks; Postgres, eval-extra and Next.js results are not claimed. The owner's internal session identity and public issue-comment steps were adapted to the actual contributor and the user's PR-only communication authorization.
 
 **Next session:** inspect current-head hosted results and actionable review feedback without rerunning unchanged local proof.
+
+## 2026-10-27 — Correctness no longer scores words inside citation markers (#404)
+
+The correctness eval is a stand-in for an LLM judge. It counts how many of the
+expected answer's words appear in the generated answer. It counted words
+inside the `[cite:<id>]` markers too, so a chunk id like `doc-data-export`
+gave one row the word "export" when its prose only said "exported". Each
+marker is now replaced with a space before counting, so the words on either
+side stay separate. That row drops from 0.78 to 0.67, and the published
+correctness mean goes from 0.90 to 0.89. The committed baseline and current
+records were regenerated with the documented `python -m evals.run_eval`
+command, and the README and benchmarks rows now show 0.89.
+
+## 2026-10-27 — `record` now checks a bare record's per-phase timings the way `build` does (#406)
+
+`CostRecord.build` refuses a `per_phase_ms` map whose keys are not strings, or
+whose values are not finite non-negative numbers. `TelemetryStore.record` never
+ran those checks, and records made directly with `CostRecord(...)` skip `build`.
+So a tuple key crashed with a raw `TypeError`, `{1: 5.0, "1": 6.0}` quietly lost
+the 5.0, `{None: 5.0}` came back as `{"null": 5.0}`, and values like `"fast"`,
+`NaN` or `-3.0` were stored as given. PR #390 had listed this as out of scope.
+The check is now one shared helper that both `build` and `record` call, so
+`record` raises the same message and stores nothing. For `total_latency_ms`,
+`record` refuses only NaN and wrong types, because `aggregate` checks the rest
+when it reads the data back. No read path checks the per-phase map, so `record`
+applies the whole rule.
+
+## 2026-10-27 — The telemetry aggregate no longer publishes negative spend (#410)
+
+`aggregate` already refused a cost that was not a finite number, a negative
+latency and a negative token count. It never refused a negative cost. Normal
+records can't have one, because the price table rejects negative rates and
+counts. But a record made directly with `CostRecord(...)` can, and the store
+keeps it on purpose, since the sign is meant to be checked when the data is
+read. So `-5.0` next to `0.002` published total spend of `-4.998` in the JSON
+dump and in the dashboard headline. `aggregate` now refuses any negative
+`total_usd` with its own message. The dashboard shows its "Summary unavailable"
+banner and keeps the raw value in the table. `total_usd` is the only money
+field anything adds up or shows, and a test now pins that. The test that lists
+every "non-negative" check also finds the `>= 0.0` wording now, which is how
+this one was missed.
+
+## 2026-10-27 — The docs now say what the correctness eval actually measures (#411)
+
+The README called the correctness eval "judge-scored", and the architecture
+doc said the eval uses the same retriever, reranker and generator as
+production. In fact it uses the simple template generator over an in-memory
+word-overlap retriever. No reranker runs, and the correctness score counts how
+many of the expected answer's words appear in the generated one. Both docs now
+say that. No numbers changed. The README also says real-LLM eval runs can be
+started by an operator, but no code in the repo does that. That sentence is
+left for its own issue.
+
+## 2026-10-28 — The docs no longer describe eval runs that don't exist (#414)
+
+The README and the benchmarks page said that real-LLM, real-pgvector eval
+runs could be triggered by setting an API key and a database URL. The code
+reads neither, so the eval always runs the small built-in fixture. Three
+comments named a switch variable for it, each with a different spelling,
+and nothing reads any of them. The README also said the rewriter benchmark
+could use the Anthropic rewriter and run on your own corpus. It can do
+neither. All of these now say what actually runs, and that real-LLM numbers
+are pending. A new test checks that any eval switch the docs name is read
+by the code, and that the benchmark's options match what the README says.
+Building a real backend is filed as #415 for JT to decide, since it needs
+an API budget. PR #416.
+
+## 2026-10-28 — The streaming endpoint now reranks the same candidates as the library (#417)
+
+With a reranker, the streaming pipeline asked the retriever for four times
+as many results. The retriever then multiplied by four again, so the
+streaming path searched each channel 16 results deep for every one the
+library searched 4 deep. The two paths reranked different candidate pools,
+and the same question could cite a different source depending on which path
+answered it. The retriever now exposes the exact candidate pool its own
+search reranks, and the streaming pipeline uses it. A randomized test
+checks that both paths give identical reranked results. PR #418.
+
+## 2026-10-28 — Embedding values too large for the database are refused up front (#419)
+
+The vector column stores 32-bit floats. The guard on embedding values only
+checked that each value was a finite 64-bit number, so a value above about
+3.4e38 passed the guard and was then rejected by Postgres, after every
+document in the batch had already been embedded (and paid for). The guard now
+refuses such a value immediately and names its position. The cut-off was
+measured against pgvector, and the guard refuses exactly what pgvector
+refuses, nothing more. A related question, what to do with an all-zero
+embedding that the database can never rank, is filed for JT as #420.
+PR #421.
+
+## 2026-10-29 — A query or document text that isn't a string is refused before any paid call (#422)
+
+Nothing checked that a search query or a document's text was actually a
+string. A query of bytes, a number or a list was sent to the embedder (a
+paid call) before failing with an unhelpful error. With a query rewriter
+the query reached the rewriter instead, and the search could even succeed.
+A document whose text was a list or a dict was accepted outright. The same
+gap existed in the Anthropic rewriter, the Anthropic generator and the Cohere
+reranker. Each of them sent a bytes query straight to its paid API. All of
+these entry points now refuse a non-string with a clear message before
+spending anything. The rule is the same one the document id already used:
+string subclasses are accepted. PR #423.
+
+## 2026-10-29 — A blank query or rewriter sub-query is refused before any paid call (#424)
+
+The "query must be non-empty" check only caught the empty string. A query of
+only spaces, tabs, an ideographic space or a zero-width character got past it.
+It was sent to the embedder (a paid call) and searched, and the result was
+always empty. A blank sub-query from a rewriter wasn't checked at all. "Blank"
+now has one definition: only whitespace, or only invisible formatting
+characters like the zero-width space, which Python's `strip()` does not
+remove. Every place that already refused an empty query now refuses a blank
+one the same way. That covers the retriever, both rewriters, both rerankers
+and the streaming pipeline. The demo capture script and the streaming demo
+server follow the same rule, so a blank `q` gets a 400 instead of an empty
+stream. PR #425.
+
+## 2026-10-29 — The generators and the Next.js demo refuse a blank query too (#426)
+
+The blank-query fix in #424 covered every place that already refused an empty
+query. Two places never did. The Anthropic generator sent an empty or blank
+query to the paid API, and the template generator answered one. Both now
+refuse it with the same "query must be non-empty" message. The template
+generator also checks that the query is a string, so every generator follows
+the same rules. The Next.js demo answered a missing or blank `q` with a full
+streamed answer, which no longer matched the Python demo's 400. It now returns
+`400 missing q` too. Its "blank" check is a port of the Python one. It can't
+use JavaScript's built-in whitespace class, because that class treats a few
+characters differently from Python. A shared table of test rows is checked
+against both versions, so they can't drift apart without a test failing.
+PR #429.

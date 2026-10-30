@@ -4331,3 +4331,193 @@ context_for_next_session:
 decisions_made: []
 followups: []
 ---
+
+---
+session: 2026-10-27T07:17Z
+issue: 404
+branch: session/2026-10-27-0717-issue-404
+focus: CORRECTNESS_PROXY_CREDITED_TOKENS_INSIDE_CITE_MARKERS_SO_A_CHUNK_ID_SUPPLIED_ANSWER_CONTENT_AND_HELD_THE_PUBLISHED_MEAN_AT_0_90
+phase: shipped
+delta:
+  files_changed: 6
+  tests_added: 10
+  suite: "2927 passed, 6 skipped, 26 deselected (fresh py3.12 .[dev] venv); ruff check + format clean; pg job and nextjs demo not run locally (untouched)"
+decisions_made: []
+measured: "main 1b6ebd6: _score_correctness('See the policy [cite:pro-14-day-refund-window].', 'Pro customers get a 14-day refund window.') -> 0.714 (5/7); rag_qa_007 0.7778; suite mean 0.9008. After: 0.0; rag_qa_007 0.6667; mean 0.8869 (README + docs/benchmarks.md 0.90 -> 0.89). Artifacts from python -m evals.run_eval [--write-baselines] --suite correctness; a rerun changes only run_id/git_sha/started_at. Revert (run_eval.py only, pycache cleared) 8 of 10 red; 2 green controls (prose beside a colliding marker, marker between two words); the second is red against sub('') instead of sub(' ')."
+context_for_next_session:
+  - "MARKERS_REPLACED_WITH_A_SPACE_NOT_DELETED_so_'refund[cite:a]window'_stays_two_tokens"
+  - "ONLY_CORRECTNESS_TOKENIZES_ANSWER_TEXT_retrieval_and_reranker_tokenize_query_and_chunk_text_which_has_no_markers"
+  - "WORK_WAS_DONE_2026_10_26_IN_AN_UNPUSHED_WORKTREE_cherry_picked_onto_a_fresh_branch_and_reverified"
+followups: []
+---
+
+---
+session: 2026-10-27T07:25Z
+issue: 406
+branch: session/2026-10-27-0718-issue-406
+focus: RECORD_SKIPPED_BUILDS_PER_PHASE_MS_KEY_AND_VALUE_CHECKS_FOR_A_BARE_COSTRECORD_390_DEFERRED_HALF
+phase: shipped
+delta:
+  files_changed: 3
+  tests_added: 26
+  suite: "2942 passed, 7 skipped, 26 deselected (fresh py3.11 and py3.12 .[dev] venvs); 2952 passed after rebase onto #408 (py3.12); ruff check + format clean; pg job, eval job, nextjs demo not run locally (untouched)"
+decisions_made: []
+measured: "main 1b6ebd6, bare CostRecord -> record -> since(-inf): {('a','b'): 1.0} raw TypeError from json.dumps; {1: 5.0, '1': 6.0} read back {'1': 6.0}; {None: 5.0} read back {'null': 5.0}; values 'fast', None, [1], True, nan, inf, -3.0, 2**70, 10**400 stored as given. After: build's exact ValueError, nothing stored. Revert (telemetry.py only, pycache cleared) 20 of 26 red; 6 green controls (round trips of maps build accepts)."
+context_for_next_session:
+  - "PER_PHASE_MS_GETS_THE_FULL_RULE_AT_RECORD_unlike_total_latency_ms_which_245_scopes_to_nan_and_type_because_aggregate_guards_it_on_read_nothing_reads_per_phase_ms_behind_a_guard"
+  - "NON_NEGATIVE_INVENTORY_LOCK_test_latency_domain_boundaries_fires_on_any_new_function_with_a_non_negative_raise_add_it_with_the_read_boundary_reason"
+  - "PYTEST_ADDOPTS_Q_SO_-q_ON_THE_CLI_HIDES_THE_SUMMARY_LINE_run_without_-q_to_read_counts"
+followups: []
+---
+
+---
+session: 2026-10-27T07:36Z
+issue: 410
+branch: session/2026-10-27-0737-issue-410
+focus: AGGREGATE_SUMMED_A_NEGATIVE_TOTAL_USD_213_CARRIED_THE_NON_NEGATIVE_CLAUSE_FOR_LATENCY_AND_TOKENS_NOT_COST
+phase: shipped
+delta:
+  files_changed: 4
+  tests_added: 15
+  suite: "2967 passed, 7 skipped, 26 deselected (fresh py3.11 and py3.12 .[dev] venvs); ruff check + format clean; pg job, eval job, nextjs demo not run locally (untouched)"
+decisions_made: []
+measured: "main 49660aa, bare CostRecord total_usd -5.0 and 0.002: aggregate().total_usd -4.998; record->since->dump_aggregate_json wrote total_usd -4.998; dashboard headline $-4.9980. After: ValueError 'total_usd values must all be non-negative', no file written, dashboard banner, table keeps $-5.000000. Revert (telemetry.py only, pycache cleared) 8 of 15 red; 7 green controls (zero/positive sums, 3 finiteness-message rows, good headline, money-field population, components unpublished). Neighbours: sum(costs)<0 guard 2 red; negativity before finiteness 3 red suite-wide (-inf message)."
+context_for_next_session:
+  - "TOTAL_USD_IS_THE_ONLY_PUBLISHED_MONEY_FIELD_prompt_usd_and_completion_usd_are_stored_but_nothing_sums_or_publishes_them_test_cost_domain_boundary_pins_the_population"
+  - "NON_NEGATIVE_INVENTORY_LOCK_NOW_MATCHES_THE_GTE_0_SPELLING_so_ModelPrice___post_init___is_pinned_as_telemetry.__post_init__"
+  - "SAME_SIZE_REORDER_PROBE_RESTORED_IN_THE_SAME_SECOND_LEFT_A_STALE_PYC_3_false_reds_until_pycache_cleared"
+followups: []
+---
+
+---
+session: 2026-10-27T07:44Z
+issue: 411
+branch: session/2026-10-27-0743-issue-411
+focus: README_AND_ARCHITECTURE_CALLED_THE_CORRECTNESS_EVAL_JUDGE_SCORED_AND_RERANKER_BACKED_IT_IS_A_TOKEN_OVERLAP_PROXY_OVER_AN_IN_MEMORY_RETRIEVER
+phase: shipped
+delta:
+  files_changed: 2
+  tests_added: 0
+  suite: "2952 passed, 7 skipped, 26 deselected (fresh py3.12 .[dev] venv, after commit); doc-lock tests 31 passed; ruff check + format clean"
+decisions_made: []
+measured: "main 49660aa: run_all_suites builds TemplateGenerator() over _retrieve_in_memory(k=5); no reranker constructed, no judge called; _score_correctness is content-token overlap. README:122 said judge-scored; architecture.md section 7 said same retriever / reranker / generator stack. Docs-only, no revert probe."
+context_for_next_session:
+  - "DID_NOT_USE_THE_ISSUES_SUGGESTED_WORDING_an_LLM_judge_run_needs_an_operator_API_key_because_run_eval_says_the_real_backend_is_not_implemented"
+  - "README_REAL_LLM_EVAL_RUNS_ARE_OPERATOR_TRIGGERED_SENTENCE_AND_BENCHMARKS_MD_SAME_CLAIM_DESCRIBE_A_PATH_NO_CODE_IMPLEMENTS_not_fixed_here"
+followups: []
+---
+
+---
+session: 2026-10-28T07:29Z
+issue: 414
+branch: session/2026-10-28-0729-issue-414
+focus: DOCS_DESCRIBED_AN_OPERATOR_TRIGGERED_REAL_LLM_PGVECTOR_EVAL_AND_AN_ANTHROPIC_REWRITER_BENCH_THAT_DO_NOT_EXIST_THREE_UNREAD_RAG_EVAL_SWITCH_SPELLINGS
+phase: shipped
+delta:
+  files_changed: 7
+  tests_added: 9
+  suite: "2978 passed 31 skipped; ruff check + format clean"
+decisions_made: []
+measured: "origin/main 6d2d3ea: git grep RAG_EVAL_ -> RAG_EVAL_BACKEND=pgvector (run_eval.py), =anthropic (eval.yml), RAG_EVAL_GENERATOR=anthropic (evals/__init__.py, not in the issue), no reader. bench_rewriter --help = {--k, --output}, hard-coded TemplateRewriter; README said it 'wires' AnthropicRewriter and runs 'on your own corpus'; its docstring cited a 'separate workflow' (only ci.yml, eval.yml exist). evals/__init__.py also still called correctness 'semantic' after #411. Revert probe (6 files == main, checked): 7 red / 2 green. A first zsh probe with an unsplit $F reverted nothing and was all green. PR #416; feature split to #415 (priority:low, budget decision)."
+context_for_next_session:
+  - "THE_ISSUE_LISTED_TWO_FILES_THE_CLAIM_LIVED_IN_FIVE_a_reader_check_over_every_RAG_EVAL_name_found_the_third_spelling"
+  - "ZSH_DOES_NOT_WORD_SPLIT_AN_UNQUOTED_VAR_a_revert_loop_over_$F_ran_zero_times_and_reported_all_green_assert_the_revert_happened_before_reading_the_result"
+  - "A_GIT_LS_FILES_LOCK_MUST_EXCLUDE_TESTS_OR_ITS_OWN_FILE_TRIPS_IT_once_committed"
+followups: ["#415"]
+---
+
+---
+session: 2026-10-28T07:52Z
+issue: 417
+branch: session/2026-10-28-0753-issue-417
+focus: STREAMING_PIPELINE_OVER_FETCHED_TWICE_WITH_A_RERANKER_16K_PER_CHANNEL_VS_THE_LIBRARYS_4K_SO_THE_SSE_PATH_RERANKED_A_DIFFERENT_POOL
+phase: shipped
+delta:
+  files_changed: 3
+  tests_added: 68
+  suite: "3046 passed 31 skipped (after commit); ruff check + format clean"
+decisions_made: []
+measured: "origin/main 53750a3, LIMIT-honouring fake connection, LexicalOverlapReranker, chunk X lexical 3 / dense 5: library LIMITs [4,4] top-1 D1, streaming LIMITs [16,16] top-1 X. After: both [4,4] top-1 D1. Revert (streaming.py at main): 39 red / 29 green (controls + 22 random seeds whose pools coincide). PR #418."
+context_for_next_session:
+  - "Retriever.rerank_pool_IS_THE_ONE_DEFINITION_OF_THE_PRE_RERANK_POOL_streaming_duck_types_it_and_falls_back_for_fakes"
+  - "EVERY_STREAMING_TEST_USED_A_FAKE_RETRIEVER_WITHOUT_INTERNAL_OVERFETCH_a_fake_hides_a_multiplier_the_real_one_applies"
+  - "OPEN_FROM_THE_SAME_HUNT_to_pgvector_checks_finiteness_as_float64_for_a_float32_vector_column_zero_or_underflowing_vectors_give_NaN_cosine_not_yet_filed"
+followups: []
+---
+
+---
+session: 2026-10-28T07:57Z
+issue: 419
+branch: session/2026-10-28-0757-issue-419
+focus: TO_PGVECTOR_CHECKED_FINITENESS_AS_FLOAT64_BUT_VECTOR_N_IS_FLOAT32_A_COMPONENT_PAST_3_4E38_FAILED_IN_POSTGRES_AFTER_THE_BATCH_WAS_EMBEDDED
+phase: shipped
+delta:
+  files_changed: 3
+  tests_added: 19
+  suite: "2997 passed 31 skipped (after commit); ruff check + format clean"
+decisions_made: []
+measured: "scratch PG 17.6 + pgvector (initdb -E UTF8, LC_ALL=C): FLT_MAX and the rounding midpoint 3.4028235677973366e38 stored as FLT_MAX; nextafter(midpoint) both signs, 3.5e38, 1e39 -> 'out of range for type vector'; 1e-50 stored as 0. Guard refuses abs > midpoint, matching pgvector exactly. Revert 8 red / 10 green. test_past_float_range_siblings pinned acceptance of 2**1023 and float max (both refused by pgvector) -> now the named float32 refusal plus a 10**38 accepted arm. Zero-norm/underflow NaN cosine filed as decision-revisit #420. PR #421."
+context_for_next_session:
+  - "A_GUARD_THAT_CHECKS_A_TYPE_IS_FINITE_MUST_CHECK_THE_STORAGE_TYPE_not_the_language_type"
+  - "396_PINNED_ACCEPTANCE_OF_VALUES_THE_DATABASE_REFUSES_an_anti_over_reach_arm_can_pin_a_wrong_answer"
+  - "OPEN_420_zero_norm_vector_HashEmbedder_emits_one_JT_gated"
+followups: ["#420"]
+---
+
+---
+session: 2026-10-29T07:37Z
+issue: 422
+branch: session/2026-10-29-0729-issue-422
+focus: A_NON_STR_QUERY_OR_DOCUMENT_TEXT_WAS_NEVER_TYPE_CHECKED_SO_IT_REACHED_THE_EMBEDDER_REWRITER_ANTHROPIC_AND_COHERE_BEFORE_A_BARE_ERROR_AND_LIST_DICT_TEXT_WAS_ACCEPTED
+phase: shipped
+delta:
+  files_changed: 7
+  tests_added: 118
+  suite: "3181 passed 7 skipped (after commit); ruff check + format clean"
+decisions_made: []
+measured: "origin/main 094efe2, fake conn + counting embedder: search/rerank_pool on b'refund policy', 123, ['refund','policy'], ('refund',) -> 1 embed call then bare AttributeError; same with a rewriter -> rewrite() called and the search SUCCEEDED (2 embeds); sub_queries ('who wrote Hamlet', b'bad') embedded the first; Document('d1', list|dict) ACCEPTED. Siblings not in the issue: AnthropicRewriter.rewrite(b'...') and AnthropicGenerator.generate(b'...') sent \"Query: b'...'\" to messages.create; CohereReranker.rerank(b'...') reached client.rerank. Revert (6 files == main, pycache cleared): 112 red / 6 green (controls); per-file 54/13/12/12/9/12 = 112. PR #423."
+context_for_next_session:
+  - "THE_ISSUE_NAMED_THE_EMBEDDER_BUT_THE_REWRITER_GENERATOR_AND_COHERE_SEAMS_WERE_PAID_TOO_bytes_has_strip_so_it_passed_every_emptiness_check"
+  - "THE_REWRITER_PATH_HID_THE_BUG_a_rewriter_returning_strings_made_a_list_query_search_succeed_so_no_error_ever_surfaced"
+  - "TYPE_RULE_IS_ISINSTANCE_STR_AS_EXTERNAL_ID_str_subclass_accepted_bool_refused_type_check_before_emptiness"
+followups: []
+---
+
+---
+session: 2026-10-29T07:55Z
+issue: 424
+branch: session/2026-10-29-0741-issue-424
+focus: A_WHITESPACE_ONLY_OR_ZERO_WIDTH_QUERY_PASSED_IF_NOT_QUERY_AND_WAS_EMBEDDED_FOR_A_GUARANTEED_EMPTY_RESULT_AND_BLANK_SUB_QUERIES_WERE_NEVER_CHECKED
+phase: shipped
+delta:
+  files_changed: 10
+  tests_added: 150
+  suite: "3331 passed 7 skipped (after commit); ruff check + format clean"
+decisions_made: []
+measured: "origin/main d29bfde, fake conn + counting embedder: search(' '|'\\t\\n'|'\\u3000'|'\\u00a0'|'\\u200b'|'\\ufeff') -> 1 embed 2 SQL [] each; sub_queries ('a','   ') and ('   ','a') -> 2 embeds 4 SQL []; RewriteResult(('',)) constructed. After: all ValueError, 0 embeds 0 SQL. Catalog: isspace == strip() == re \\s (29 cp), Cf 170 cp, none of the 199 yields a word_tokens token. Revert (6 call-site files == main, text.py helper kept so tests import, pycache cleared): 119 red / 62 green (definition tests, controls, strip-covered rewriter arms). PR #425."
+context_for_next_session:
+  - "BLANK_IS_ISSPACE_OR_CF_rag_kit_text_is_blank_strip_misses_U200B_UFEFF_U2060"
+  - "THE_PRE_CHECKS_THAT_COPY_RUN_S_RULE_capture_demo_and_the_SSE_server_missing_q_400_must_follow_it_or_q_plus_plus_plus_gets_an_empty_200"
+  - "ANTHROPIC_GENERATOR_GENERATE_HAS_NO_EMPTINESS_CHECK_accepts_empty_and_blank_query_left_unchanged"
+followups: []
+---
+
+---
+session: 2026-10-29T08:08Z
+issue: 426
+branch: session/2026-10-29-0800-issue-426
+focus: ANTHROPIC_AND_TEMPLATE_GENERATOR_ACCEPTED_A_BLANK_QUERY_AND_THE_NEXTJS_API_STREAM_STREAMED_FOR_A_MISSING_OR_BLANK_Q
+phase: shipped
+delta:
+  files_changed: 8
+  tests_added: 189
+  suite: "3433 passed 7 skipped (after commit); vitest 112 passed; ruff check + format clean; tsc clean"
+decisions_made: []
+measured: "origin/main 3cb15e8, fake client threshold 0.0: AnthropicGenerator.generate('', '   ', '\\u200b', '\\ufeff\\u3000') -> 1 messages.create each, GeneratedAnswer; TemplateGenerator same -> GeneratedAnswer; Next.js GET /api/stream no q / q= / %20%20 / %E2%80%8B / %E3%80%80 -> 200, 276 SSE events. After: ValueError 0 calls; 400 missing q. Revert (generator.py + route.ts == main, pycache cleared): pytest 50 red / 52 green (31 table arms, 20 controls, type-first); vitest 20 red / 92 green. Neighbours: isBlank as /^[\\s\\p{Cf}]*$/u 11 red; U+0085 dropped from the list 5 red. PR #429."
+context_for_next_session:
+  - "JS_BACKSLASH_S_IS_NOT_PYTHON_ISSPACE_it_lacks_U001C_U001F_and_U0085_and_includes_UFEFF_so_lib_blank_ts_lists_the_29_codepoints"
+  - "DEMO_NEXTJS_TEST_BLANK_ROWS_JSON_IS_SHARED_vitest_checks_isBlank_pytest_checks_is_blank_and_the_isspace_catalog"
+  - "CF_COUNT_IS_UNICODE_VERSION_DEPENDENT_163_on_3_11_170_on_3_12_so_a_cross_runtime_table_uses_only_long_stable_Cf_rows"
+  - "TEMPLATE_GENERATOR_NOW_TYPE_CHECKS_AND_BLANK_CHECKS_QUERY_like_AnthropicGenerator"
+followups: []
+---

@@ -35,6 +35,7 @@ from .io_utils import _describe_number, _past_float_range, atomic_write_text, co
 from .reranker import Candidate, Reranker
 from .retriever import RetrievalResult
 from .telemetry import percentile as _telemetry_percentile
+from .text import is_blank
 
 EventType = Literal[
     "retrieving",  # phase start: retrieving from PG
@@ -311,8 +312,10 @@ class StreamingPipeline:
     """
 
     # When a reranker is set, over-fetch from retrieval so the reranker
-    # has more candidates than the final `k` to choose from. Matches the
-    # multiplier baked into `Retriever.search` (#2).
+    # has more candidates than the final `k` to choose from. Only for a
+    # retriever without `rerank_pool`: `Retriever.search` already over-fetches
+    # its channels by this factor, so calling it with `k * 4` read them 16k
+    # deep and reranked a different pool than the library does (#417).
     RERANK_OVERFETCH = 4
 
     def __init__(
@@ -331,16 +334,27 @@ class StreamingPipeline:
     def run(self, query: str, k: int = 5) -> Iterator[StreamEvent]:
         if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
             raise ValueError(f"k must be a positive integer, got {k!r}")
-        if not query:
+        # With `k` and emptiness, before the first event: the retriever and the
+        # reranker it feeds may both be paid calls (#422).
+        if not isinstance(query, str):
+            raise ValueError(f"query must be a string; got {type(query).__name__}")
+        # `Retriever.search`'s rule (#424), here so a blank query fails before
+        # the first event rather than on the retriever after `retrieving`.
+        if is_blank(query):
             raise ValueError("query must be non-empty")
 
         t0 = _now_ms()
         try:
             yield StreamEvent("retrieving", {"query": query, "k": k}, 0.0)
 
-            over_fetch = k * self.RERANK_OVERFETCH if self.reranker else k
+            pool = getattr(self.retriever, "rerank_pool", None) if self.reranker else None
             t_ret_start = _now_ms()
-            retrieved = self.retriever.search(query, k=over_fetch, reranker=None)
+            if callable(pool):
+                # The pool `Retriever.search(query, k, reranker=...)` reranks (#417).
+                retrieved = pool(query, k)
+            else:
+                over_fetch = k * self.RERANK_OVERFETCH if self.reranker else k
+                retrieved = self.retriever.search(query, k=over_fetch, reranker=None)
             t_ret_end = _now_ms()
             ret_ms = t_ret_end - t_ret_start
             if self.timings is not None:

@@ -121,7 +121,9 @@ consumes both.
 [llm-eval-harness] repo (imported, not vendored — D-002). Three
 suites run on every PR against the synthetic `rag-qa-v0.1` golden
 set: faithfulness against the citation contract, recall@5 against the
-in-memory corpus, and judge-scored answer correctness. CI's `eval`
+in-memory corpus, and answer correctness as a deterministic token-overlap
+proxy (the share of the expected answer's content tokens that appear in
+the generated one; no LLM judge runs). CI's `eval`
 job builds the composite PR comment with the per-suite mean-score
 table the Benchmarks section quotes verbatim; baselines live under
 `evals/baselines/` and the orchestrator is the deterministic
@@ -346,18 +348,23 @@ own SQLite store is the source of truth.
 
 Three eval suites run on every PR against the synthetic `rag-qa-v0.1`
 golden set (8 examples, 10-chunk in-memory corpus, dep-free
-`TemplateGenerator`). First baseline (n=8, deterministic):
+`TemplateGenerator`). Committed baselines (n=8, deterministic; correctness
+was regenerated in #404, when the scorer stopped crediting tokens inside
+`[cite:<id>]` markers and moved from 0.90 to 0.89):
 
 | suite          | mean score | reproducer                          |
 | -------------- | ---------: | ----------------------------------- |
 | faithfulness   |       1.00 | `python -m evals.run_eval`          |
 | recall_at_5    |       1.00 | `python -m evals.run_eval`          |
-| correctness    |       0.90 | `python -m evals.run_eval`          |
+| correctness    |       0.89 | `python -m evals.run_eval`          |
 
-Real-LLM eval runs (Anthropic-backed `Generator`, real pgvector
-retrieval) are operator-triggered with `ANTHROPIC_API_KEY` + `DATABASE_URL`
-locally — the CI fixture path covers regressions in the deterministic
-pipeline and keeps the workflow API-key-free.
+There is no real-LLM eval path yet. `python -m evals.run_eval` always
+runs the hermetic fixture above — the in-memory retriever and
+`TemplateGenerator` — whatever `ANTHROPIC_API_KEY` or `DATABASE_URL` is
+set to, so an `AnthropicGenerator` or real-pgvector eval number is
+pending an implementation, not an operator run (#414). The fixture path
+covers regressions in the deterministic pipeline and keeps the workflow
+API-key-free.
 
 **Reranker lift over fused-only** (issue #234, `scripts/bench_reranker.py`):
 the dep-free `LexicalOverlapReranker` lifts recall@3 on the same multi-hop
@@ -388,11 +395,11 @@ drops from 0.50 to 0.00. The rewriter splits it into `who founded it?`,
 a sub-query with no antecedent, whose top hit is `founder-cohere`; that
 ties `hq-anthropic` in the fusion and wins the id tie-break. The
 template rewriter does not carry a subject into a pronoun-bearing
-second conjunct (#379). Running it on your own corpus is two lines:
-`python -m scripts.bench_rewriter --k 3 --output md`.
-`AnthropicRewriter` numbers are pending an operator-triggered run (the
-script wires it but the bench fixture above is `TemplateRewriter`-only
-so CI stays API-key-free).
+second conjunct (#379). To reproduce the table:
+`python -m scripts.bench_rewriter --k 3 --output md`. The script benches
+only `TemplateRewriter` on its built-in fixture; it takes no corpus and
+has no `AnthropicRewriter` option, so an `AnthropicRewriter` number is
+pending an implementation (#414).
 
 ## Demo
 

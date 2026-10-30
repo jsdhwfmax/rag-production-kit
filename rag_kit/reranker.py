@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from .io_utils import _describe_number, _past_float_range, copy_json_value, refuse_bare_string
-from .text import word_tokens
+from .text import is_blank, word_tokens
 
 
 @dataclass(frozen=True)
@@ -157,7 +157,9 @@ class LexicalOverlapReranker:
         self.length_penalty = penalty
 
     def rerank(self, query: str, candidates: Sequence[Candidate]) -> list[ScoredCandidate]:
-        if not query:
+        # `""` and a blank query are one request (#424), refused alike, as
+        # `CohereReranker` refuses them. A non-str is left as it was.
+        if not query or (isinstance(query, str) and is_blank(query)):
             raise ValueError("query must be non-empty")
         q_tokens = set(_tokenize(query))
         if not q_tokens:
@@ -278,7 +280,12 @@ class CohereReranker:
         self.timeout_s = timeout_s if timeout_s is not None else self.DEFAULT_TIMEOUT_S
 
     def rerank(self, query: str, candidates: Sequence[Candidate]) -> list[ScoredCandidate]:
-        if not query:
+        # Before the paid call (#422): `b"..."` passed `not query` and went to
+        # `client.rerank`.
+        if not isinstance(query, str):
+            raise ValueError(f"query must be a string; got {type(query).__name__}")
+        # Blank as well as empty (#424): `"   "` went to `client.rerank`.
+        if is_blank(query):
             raise ValueError("query must be non-empty")
         candidates_list = list(candidates)
         if not candidates_list:

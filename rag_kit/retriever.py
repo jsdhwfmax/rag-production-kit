@@ -34,19 +34,27 @@ from .fusion import DEFAULT_K, reciprocal_rank_fusion
 from .indexer import _unstorable
 from .reranker import Candidate, Reranker
 from .rewriter import Rewriter
+from .text import is_blank
 
 
 def _require_sendable(text: str, where: str) -> None:
-    """Refuse a query Postgres cannot take as a text parameter (#366).
+    """Refuse a query Postgres cannot take as a text parameter (#366, #422).
 
     A NUL or a lone surrogate failed in psycopg's parameter adaptation as a
     `DataError` / `UnicodeEncodeError` -- after the rewriter and the embedder
     had already been paid for. The predicate is #308's, which refuses the same
-    characters in a `Document` before any embedding. A non-`str` is left to the
-    code that already handles it; this check is about characters, not types.
+    characters in a `Document` before any embedding.
+
+    A non-`str` is refused here too (#422). This used to return early for one,
+    on the grounds that "the code that already handles it" would, but nothing
+    did before the paid calls: `bytes`, an `int` or a list was embedded, and
+    only then did `unicodedata.normalize` raise a bare `TypeError`. With a
+    rewriter the query reached `rewriter.rewrite()` first, and a search whose
+    sub-queries were strings succeeded on a list query. `isinstance`, as
+    `Document.external_id` checks it, so a `str` subclass is a query.
     """
     if not isinstance(text, str):
-        return
+        raise ValueError(f"{where} must be a string; got {type(text).__name__}")
     reason = _unstorable(text)
     if reason is not None:
         raise ValueError(
@@ -124,11 +132,14 @@ class Retriever:
     ) -> list[RetrievalResult]:
         if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
             raise ValueError(f"k must be a positive integer, got {k!r}")
-        if not query:
-            raise ValueError("query must be non-empty")
         # Before the rewriter and the embedder, both of which may be paid
         # calls: this query cannot reach the lexical channel either way (#366).
+        # Before the emptiness check, so `b""` and `[]` are named by type (#422).
         _require_sendable(query, "query")
+        # Blank, not just empty (#424): `"   "` and `"\u200b"` were embedded and
+        # searched for a guaranteed `[]`, and went to the rewriter first.
+        if is_blank(query):
+            raise ValueError("query must be non-empty")
 
         if rewriter is None:
             return self._hybrid_search(query, k, reranker=reranker)
@@ -139,8 +150,13 @@ class Retriever:
             raise ValueError("rewriter returned empty sub_queries")
         # All of them before the first is embedded: the multi-hop path embeds
         # one sub-query at a time, so a bad second one cost the first (#366).
+        # A non-`str` one is refused here as well (#422): `RewriteResult` only
+        # refuses a bare string in place of the tuple, not a non-str element.
+        # And a blank one (#424): `("a", "   ")` embedded both and searched both.
         for idx, sq in enumerate(sub_queries):
             _require_sendable(sq, f"rewriter sub_queries[{idx}]")
+            if is_blank(sq):
+                raise ValueError(f"rewriter sub_queries[{idx}] must be non-empty; got {sq!r}")
         if len(sub_queries) == 1:
             # Single-sub-query rewrites collapse to the existing single-shot path
             # using the (possibly normalized) rewritten query for *retrieval*, but
@@ -157,6 +173,22 @@ class Retriever:
             reranker=reranker,
         )
 
+    def rerank_pool(self, query: str, k: int = 5) -> list[RetrievalResult]:
+        """The candidates `search(query, k, reranker=r)` hands its reranker (#417).
+
+        Channels `k * _CANDIDATE_MULTIPLIER` deep, fused, cut to that many, in
+        fused order. `StreamingPipeline` reranks this pool so the SSE path and
+        the library cite the same chunks: it used to call `search` with an
+        already over-fetched `k`, and `_hybrid_search` over-fetched again, so
+        each channel was read 16k deep instead of 4k and the pools differed.
+        """
+        if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
+            raise ValueError(f"k must be a positive integer, got {k!r}")
+        _require_sendable(query, "query")
+        if is_blank(query):
+            raise ValueError("query must be non-empty")
+        return self._hybrid_search(query, k, reranker=None, pool=True)
+
     # ------------------------------------------------------------------
     # Single-query hybrid path (the pre-D-014 behavior, factored out so
     # the multi-hop path can call it once per sub-query).
@@ -169,7 +201,9 @@ class Retriever:
         *,
         reranker: Reranker | None,
         rerank_query: str | None = None,
+        pool: bool = False,
     ) -> list[RetrievalResult]:
+        # `pool=True` returns the whole pre-rerank pool (`rerank_pool`, #417).
         # `query` drives retrieval (lexical + dense channels). `rerank_query`
         # is what the reranker scores against; it defaults to `query` so the
         # `rewriter=None` and multi-hop-per-sub-query callers are unchanged,
@@ -322,6 +356,8 @@ class Retriever:
                 )
             )
 
+        if pool:
+            return pre_rerank
         if reranker is None:
             return pre_rerank[:k]
 

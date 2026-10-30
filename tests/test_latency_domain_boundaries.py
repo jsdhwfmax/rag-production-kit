@@ -444,6 +444,11 @@ def test_an_inf_latency_stays_raw_in_the_table() -> None:
 # --- the discovered-population lock -----------------------------------------
 
 
+#: Both spellings the package uses for the clause: the prose one and the
+#: comparison one (`ModelPrice`'s ">= 0.0", #410).
+_NON_NEGATIVE_RULE = re.compile(r"non-negative|>=\s*0(?:\.0+)?(?![.\d])")
+
+
 def _non_negative_guard_sites() -> set[str]:
     """Every `ValueError` message in the package that states "non-negative".
 
@@ -451,6 +456,11 @@ def _non_negative_guard_sites() -> set[str]:
     hand list is precisely what produced #213: the non-finite clause was swept
     by following the guards, and the non-negative clause was never enumerated at
     all.
+
+    Matched on the RULE, not one spelling of it (#410): `ModelPrice` states the
+    same clause as "a finite number >= 0.0", and a matcher for the literal text
+    "non-negative" could not see it -- which is how `total_usd` went unswept
+    while latency and token counts were carried to `aggregate`.
     """
     sites: set[str] = set()
     for mod in (streaming_mod, telemetry_mod):
@@ -463,7 +473,7 @@ def _non_negative_guard_sites() -> set[str]:
                 if not isinstance(node, ast.Raise) or node.exc is None:
                     continue
                 text = ast.unparse(node.exc)
-                if "non-negative" in text:
+                if _NON_NEGATIVE_RULE.search(text):
                     sites.add(f"{path.stem}.{func.name}")
     return sites
 
@@ -480,18 +490,32 @@ def test_every_non_negative_guard_is_accounted_for() -> None:
         "streaming.record",
         "telemetry.build",
         "telemetry.cost",
+        # #410: `ModelPrice.__post_init__`'s "a finite number >= 0.0", invisible
+        # to this lock until it matched the comparison spelling. The rates are
+        # never stored; what they produce is `prompt_usd` / `completion_usd` /
+        # `total_usd`, and the one of those anything sums or publishes is
+        # `total_usd`, whose read boundary is `telemetry.aggregate` below.
+        "telemetry.__post_init__",
         # #352: the INTEGER columns at `build` and `record`. Its read boundary
         # for the token counts is `telemetry.aggregate` below, which already
         # refuses a negative count; `retrieved_count` is not aggregated or
         # rendered as a number anywhere, so it has no read boundary to agree.
         "telemetry._checked_columns",
+        # #406: `build`'s `per_phase_ms` loop, moved out so `record` applies it
+        # to a bare record too. No read boundary aggregates or renders
+        # `per_phase_ms` as a number (`aggregate` does not read it; the
+        # dashboard's `/json` passes it through `_json_safe`), so there is no
+        # read clause to agree with, and the write seam carries the whole rule.
+        "telemetry._checked_phases",
         # read / metric boundaries (#213). `telemetry.aggregate` carries two
         # clauses -- latency and token counts -- and the second of those is the
         # site THIS LOCK FOUND: #213 opened with a hand-written list of three
         # boundaries, this assertion came back with a fourth, and the fourth has
         # the least arguable consequence of them all (`dump_aggregate_json`
         # publishing `total_prompt_tokens: -4900`). That is the whole reason the
-        # population is discovered here rather than listed.
+        # population is discovered here rather than listed. Since #410 it also
+        # carries a third clause, cost, which this lock could not see the write
+        # side of while it matched only the word "non-negative".
         "streaming.percentile",
         "telemetry.aggregate",
     }, (
@@ -512,6 +536,15 @@ def test_the_inventory_matcher_can_fail() -> None:
         if isinstance(n, ast.Raise) and n.exc is not None and "non-negative" in ast.unparse(n.exc)
     ]
     assert len(found) == 1, found
+    # The comparison spelling is the same rule (#410), and the matcher the lock
+    # uses must find it; a `>= 0.5` threshold is not that rule.
+    for message, hits in (
+        ("x must be a finite number >= 0.0", True),
+        ("x must be >= 0", True),
+        ("x must be >= 0.5", False),
+        ("x must be >= 10", False),
+    ):
+        assert bool(_NON_NEGATIVE_RULE.search(message)) is hits, message
     # And a docstring merely *mentioning* the phrase is not a guard.
     prose = 'def f():\n    """Values must be non-negative."""\n    return 1\n'
     assert [n for n in ast.walk(ast.parse(prose)) if isinstance(n, ast.Raise)] == []

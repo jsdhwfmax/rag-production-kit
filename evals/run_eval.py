@@ -3,9 +3,8 @@ and writes one ``RunResult``-shape JSON per metric.
 
 Hermetic by design: an in-memory token-overlap retriever stands in for
 real pgvector retrieval so the workflow runs with zero external services.
-Real-PG / real-LLM runs are operator-triggered by setting
-``RAG_EVAL_BACKEND=pgvector`` (not implemented in this file — that lands
-when the operator wires their own ``ANTHROPIC_API_KEY`` budget).
+There is no real-PG / real-LLM backend: nothing here reads an API key, a
+database URL or a backend switch, so every run is this fixture (#414).
 
 Three suites, one JSON per:
 
@@ -22,8 +21,8 @@ Three suites, one JSON per:
   ``tests/test_eval_run.py::test_score_recall_at_5_partial_credit``.)
 - ``correctness``:   per-row fraction of expected-output content tokens
   that appear in the generated answer (a deterministic string-overlap
-  proxy for the LLM-as-judge correctness rubric; real-judge runs land
-  with an operator-set API key).
+  proxy for the LLM-as-judge correctness rubric; no real-judge path
+  exists yet).
 
 Run shape matches ``eval_harness.runner.RunResult`` so ``eval-harness
 diff-json`` can compare current vs baseline without modification.
@@ -50,6 +49,7 @@ from rag_kit import (
     TemplateGenerator,
     enforce_citations,
 )
+from rag_kit.generator import _CITE_PATTERN
 from rag_kit.io_utils import atomic_write_text
 from rag_kit.retriever import RetrievalResult
 from rag_kit.text import word_tokens
@@ -180,13 +180,26 @@ def _score_recall_at_5(
     )
 
 
+def _answer_tokens(text: str) -> list[str]:
+    """Content tokens of an answer with its ``[cite:<id>]`` markers removed.
+
+    A marker names a chunk, it is not answer content, and a judge would not
+    credit it (#404). Tokenized with the markers in, an id like
+    ``doc-data-export`` supplied ``export`` to a row whose prose only said
+    "exported", and that one token held the published correctness mean at
+    0.90. Each marker becomes a space so the words either side stay apart.
+    The same pattern the generator writes and ``enforce_citations`` reads.
+    """
+    return _tokens(_CITE_PATTERN.sub(" ", text))
+
+
 def _score_correctness(generated: GeneratedAnswer | Refusal, expected: str) -> tuple[float, str]:
     if isinstance(generated, Refusal):
         return 0.0, f"refused (reason={generated.reason})"
-    expected_tokens = set(_tokens(expected)) - _STOP
+    expected_tokens = set(_answer_tokens(expected)) - _STOP
     if not expected_tokens:
         return 0.0, "expected output had no content tokens"
-    gen_tokens = set(_tokens(generated.text)) - _STOP
+    gen_tokens = set(_answer_tokens(generated.text)) - _STOP
     hits = expected_tokens & gen_tokens
     score = len(hits) / len(expected_tokens)
     return score, f"token overlap {len(hits)}/{len(expected_tokens)} ({sorted(hits)})"
