@@ -4521,3 +4521,24 @@ context_for_next_session:
   - "TEMPLATE_GENERATOR_NOW_TYPE_CHECKS_AND_BLANK_CHECKS_QUERY_like_AnthropicGenerator"
 followups: []
 ---
+
+---
+session: 2026-10-30T05:10Z
+duration_min: 5
+issue: 405
+branch: session/2026-10-27-issue-405
+focus: integrate_upstream_for_existing_contraction_fix_pr407
+phase: draft_updated
+
+delta:
+  files_changed: 2
+  tests_added: 0
+  validation: "610 related rewriter/retriever/blank/type-boundary cases passed; whole-tree Ruff check and format check passed; fixed benchmark k=1..6 outputs/rankings/metrics unchanged from Oct27."
+context_for_next_session:
+  - "Merged upstream 8ef52f0 normally into existing PR407; only conflicts were the two append-only session histories. Both sides' existing entries are preserved without edits."
+  - "Original contraction source additions, README wording and 25-case regression file remain intact; upstream blank/non-string guards and all other upstream changes are preserved."
+  - "Historical Windows collection/19 runtime baseline evidence is reused, not a new full-suite run or hosted pass. Keep draft pending current-head Linux, Postgres, Next.js and eval checks."
+  - "No public issue/comment, automatic merge, legal signature, dependency workaround or forced push. Codex assisted; external contributor remains jsdhwfmax."
+decisions_made: []
+followups: []
+---

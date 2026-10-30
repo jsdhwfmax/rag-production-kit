@@ -3935,3 +3935,15 @@ use JavaScript's built-in whitespace class, because that class treats a few
 characters differently from Python. A shared table of test rows is checked
 against both versions, so they can't drift apart without a test failing.
 PR #429.
+
+## 2026-10-30 — Issue #405: Integrate upstream into draft PR #407
+**Duration:** ~5 min · **Branch:** session/2026-10-27-issue-405
+
+- Resolved the two session-history conflicts by preserving both branches' entries. Upstream blank/non-string safeguards and the original contraction fix remain intact.
+- 610 related cases, whole-tree Ruff and format checks passed. The unchanged fixed benchmark at k=1..6 retains the same decomposition, rankings and recall metrics.
+
+**Why this work, this session:** Upstream updates made the existing contribution conflict; this resumes the same contribution rather than adding another PR.
+
+**Open questions / blockers:** Required hosted checks remain pending; prior Windows collection and runtime baseline limits are still disclosed. No full-suite success is claimed.
+
+**Next session:** Inspect exact-head CI and maintainer feedback. Codex assisted; no separate public comments or automatic merge were made.
