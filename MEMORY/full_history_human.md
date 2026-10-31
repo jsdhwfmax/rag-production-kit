@@ -4014,3 +4014,15 @@ the write failed partway, after the first two files had already been
 overwritten. The check now refuses a directory, and it confirms the folder the
 file really lives in (after following links) can be written to. Ordinary files
 behave as before. PR #438.
+
+## 2026-10-31 — Issue #405: Integrate upstream into draft PR #407
+**Duration:** ~5 min · **Branch:** session/2026-10-27-issue-405
+
+- Resolved the two session-history conflicts by preserving both branches' entries. Upstream blank/non-string safeguards and the original contraction fix remain intact.
+- 1284 related cases, whole-tree Ruff and format checks passed. The unchanged fixed benchmark at k=1..6 retains the same decomposition, rankings and recall metrics.
+
+**Why this work, this session:** Upstream updates made the existing contribution conflict; this resumes the same contribution rather than adding another PR.
+
+**Open questions / blockers:** Required hosted checks remain pending; prior Windows collection and runtime baseline limits are still disclosed. No full-suite success is claimed.
+
+**Next session:** Inspect exact-head CI and maintainer feedback. Codex assisted; no separate public comments or automatic merge were made.
