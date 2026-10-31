@@ -38,6 +38,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from .text import FORMAT_CHARACTERS as _FORMAT_CHARACTERS
 from .text import SENTENCE_CLOSERS as _SENTENCE_CLOSERS
 from .text import SENTENCE_TERMINATORS as _SENTENCE_TERMINATORS
 from .text import is_blank
@@ -94,8 +95,6 @@ class Rewriter(Protocol):
 # ----------------------------------------------------------------------
 
 
-_WHITESPACE = re.compile(r"\s+")
-
 # "compare X with Y", "compare X and Y", "compare X to Y"
 _COMPARE_RE = re.compile(
     r"^\s*compare\s+(?P<a>.+?)\s+(?:with|to|and|vs\.?|versus)\s+(?P<b>.+?)\s*\??\s*$",
@@ -134,9 +133,17 @@ _COMPARE_RE = re.compile(
 # six-character class. After #262 widened the generator to 26 closers in runs,
 # `.»`, `.」`, `.）`, `.**` and `.")` before "Then" no longer decomposed. So the
 # candidate gaps are found here and the text before each is checked instead.
+#
+# A format character (category Cf) may sit in the closer run, as in the
+# generator's splitter (#431): `What is RAG.\u200b" Then ...` did not decompose
+# while `What is RAG." Then ...` did. `_norm` keeps a format-only run between two
+# characters (#430), so it reaches here; a blank run holding whitespace is
+# already one space by then, which is why `_THEN_GAP` and the gaps below stay
+# `\s+`. The same holds for the compare and "and" sentence gaps below.
+_FORMAT = re.escape(_FORMAT_CHARACTERS)
 _THEN_GAP = re.compile(r"\s+(?=then\b)", re.IGNORECASE)
 _ENDS_A_SENTENCE = re.compile(
-    rf"[{re.escape(_SENTENCE_TERMINATORS)}][{re.escape(_SENTENCE_CLOSERS)}]*$"
+    rf"[{re.escape(_SENTENCE_TERMINATORS)}][{re.escape(_SENTENCE_CLOSERS)}{_FORMAT}]*$"
 )
 
 
@@ -149,8 +156,8 @@ _ENDS_A_SENTENCE = re.compile(
 # trailing `？！` or `。」` is not a gap.
 _CJK_TERMINATORS = "。！？｡"
 _HARD_SENTENCE_GAP = re.compile(
-    rf"[{re.escape(_SENTENCE_TERMINATORS.replace('.', ''))}][{re.escape(_SENTENCE_CLOSERS)}]*\s+\S"
-    rf"|[{_CJK_TERMINATORS}](?=[^\s{re.escape(_SENTENCE_CLOSERS + _SENTENCE_TERMINATORS)}])"
+    rf"[{re.escape(_SENTENCE_TERMINATORS.replace('.', ''))}][{re.escape(_SENTENCE_CLOSERS)}{_FORMAT}]*\s+\S"
+    rf"|[{_CJK_TERMINATORS}][{_FORMAT}]*(?=[^\s{re.escape(_SENTENCE_CLOSERS + _SENTENCE_TERMINATORS)}{_FORMAT}])"
 )
 
 # The "and" conjuncts use a narrower rule (#376). An ASCII `!` and `…` also
@@ -172,13 +179,13 @@ _HARD_SENTENCE_GAP = re.compile(
 _SOFT_TERMINATORS = "!…"
 _AND_HARD_GAP = re.compile(
     rf"[{re.escape(_SENTENCE_TERMINATORS.replace('.', '').replace('!', '').replace('…', '').replace('?', ''))}]"
-    rf"[{re.escape(_SENTENCE_CLOSERS)}]*\s+\S"
-    rf"|[{_CJK_TERMINATORS}](?=[^\s{re.escape(_SENTENCE_CLOSERS + _SENTENCE_TERMINATORS)}])"
+    rf"[{re.escape(_SENTENCE_CLOSERS)}{_FORMAT}]*\s+\S"
+    rf"|[{_CJK_TERMINATORS}][{_FORMAT}]*(?=[^\s{re.escape(_SENTENCE_CLOSERS + _SENTENCE_TERMINATORS)}{_FORMAT}])"
 )
 _AND_SOFT_GAP = re.compile(
-    rf"[{re.escape(_SOFT_TERMINATORS)}][{re.escape(_SENTENCE_CLOSERS)}]*\s+(?=\S)"
+    rf"[{re.escape(_SOFT_TERMINATORS)}][{re.escape(_SENTENCE_CLOSERS)}{_FORMAT}]*\s+(?=\S)"
 )
-_AND_QUESTION_GAP = re.compile(rf"\?([{re.escape(_SENTENCE_CLOSERS)}]*)\s+(?=\S)")
+_AND_QUESTION_GAP = re.compile(rf"\?([{re.escape(_SENTENCE_CLOSERS)}{_FORMAT}]*)\s+(?=\S)")
 
 
 def _spans_a_sentence(conjunct: str) -> bool:
@@ -187,7 +194,9 @@ def _spans_a_sentence(conjunct: str) -> bool:
         return True
     for gap in _AND_QUESTION_GAP.finditer(conjunct):
         # A quoted title's `?`: a closer, then the sentence goes on in lowercase.
-        if not (gap.group(1) and conjunct[gap.end()].islower()):
+        # A format character alone is no closer (#431).
+        has_closer = gap.group(1).strip(_FORMAT_CHARACTERS)
+        if not (has_closer and conjunct[gap.end()].islower()):
             return True
     for gap in _AND_SOFT_GAP.finditer(conjunct):
         rest = conjunct[gap.end() :]
@@ -273,7 +282,32 @@ _QUESTION_PREFIXES = (
 
 
 def _norm(text: str) -> str:
-    return _WHITESPACE.sub(" ", text).strip()
+    """`text` with each separating run of blank characters made one space, and the ends stripped.
+
+    Blank is `is_blank`'s rule, whitespace or a format character (#427). The
+    whitespace-only version kept a `"\u200b"` or `"\ufeff"` beside a space or at
+    an end, so `"What is RAG. Then \u200b"` kept a zero-width step that
+    `RewriteResult` refuses (#424). The same leftovers gave `"What is \u200b?"`,
+    a doubled `"RAG?\u200b?"`, and a `"\u200bCompare ..."` or `"RAG.\u200b Then"`
+    that no longer split as its whitespace twin does. A run is a separator when
+    it holds whitespace or touches an end. A format-only run between two other
+    characters is part of the word (a ZWNJ in Persian, a soft hyphen, a ZWJ) and
+    is kept.
+    """
+    out: list[str] = []
+    run: list[str] = []
+    for ch in text:
+        if is_blank(ch):
+            run.append(ch)
+            continue
+        if run and out:
+            if any(c.isspace() for c in run):
+                out.append(" ")
+            else:
+                out.extend(run)
+        run = []
+        out.append(ch)
+    return "".join(out)
 
 
 def _looks_like_question(s: str) -> bool:
@@ -308,7 +342,8 @@ def _split_then(query: str) -> list[str] | None:
         # independent question — including when it's followed by punctuation
         # rather than a space (see _THEN_PREFIX / #92).
         s = _THEN_PREFIX.sub("", s)
-        if s:
+        # `is_blank`, as `AnthropicRewriter` filters (#424, #427).
+        if not is_blank(s):
             cleaned.append(s)
     if len(cleaned) >= 2:
         return cleaned
@@ -322,8 +357,9 @@ def _split_then(query: str) -> list[str] | None:
 # appended `?` stacked a second one after the closer. That is the same doubled
 # terminator #94/#111/#132/#150 removed for the bare case. The closers are
 # the generator's set (`text.SENTENCE_CLOSERS`), the one #320 gave the
-# Then-split.
-_TRAILING_PUNCT = re.compile(rf"[{re.escape(_TERMINATORS + _SENTENCE_CLOSERS)}]+$")
+# Then-split. A format character in the run is dropped with the terminators
+# (#431), so `"Dune?\u200b"` reads as `"Dune?"` does.
+_TRAILING_PUNCT = re.compile(rf"[{re.escape(_TERMINATORS + _SENTENCE_CLOSERS)}{_FORMAT}]+$")
 
 
 def _as_question(s: str) -> str:
@@ -338,7 +374,9 @@ def _as_question(s: str) -> str:
     tail = _TRAILING_PUNCT.search(s)
     if tail is None:
         return s + "?"
-    closers = "".join(ch for ch in tail.group() if ch not in _TERMINATORS)
+    closers = "".join(
+        ch for ch in tail.group() if ch not in _TERMINATORS and ch not in _FORMAT_CHARACTERS
+    )
     return s[: tail.start()] + closers + "?"
 
 
@@ -356,7 +394,7 @@ def _split_compare(query: str) -> list[str] | None:
         return None
     a = _norm(match.group("a"))
     b = _norm(match.group("b"))
-    if not a or not b:
+    if is_blank(a) or is_blank(b):
         return None
     # And an unambiguous sentence end inside an entity ("MySQL? Which one is
     # cheaper to host") refuses the match too. A bare ASCII `.` is left out:
@@ -394,7 +432,7 @@ def _split_question_and(query: str) -> list[str] | None:
     out: list[str] = []
     for part in parts:
         s = _norm(part)
-        if not s:
+        if is_blank(s):
             return None
         if not _looks_like_question(s):
             return None

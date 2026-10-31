@@ -44,7 +44,7 @@ from typing import Any, Protocol
 from .comparison import render_comparison
 from .io_utils import copy_json_value
 from .retriever import RetrievalResult
-from .text import SENTENCE_CLOSERS, SENTENCE_TERMINATORS, is_blank
+from .text import FORMAT_CHARACTERS, SENTENCE_CLOSERS, SENTENCE_TERMINATORS, is_blank
 
 _DEFAULT_THRESHOLD = 0.02  # tuned against the in-repo retrieval tests; >0 by construction
 # Decimal places the refusal detail has always rendered at, and still renders
@@ -96,12 +96,25 @@ _TERMINATORS = SENTENCE_TERMINATORS
 # The gap is a capture group because the terminators and closers it follows
 # stay attached to the sentence they end; Python `re` has no variable-width
 # lookbehind to express that.
+#
+# A format character (category Cf: U+200B, U+FEFF, U+2060, U+00AD) is blank by
+# `text.is_blank` (#424) and invisible, but the gap had to START with
+# whitespace, so `Germany.\u200b The sky ... [cite:a].` was one sentence and the
+# uncited claim passed (#431, the surface #427/#430 did not list). So a format
+# character may sit anywhere in the terminator and closer run, and the gap is a
+# run of blank characters holding at least one whitespace character -- the run
+# rule `rewriter._norm` uses. A format-only gap (`blue.\u200bThe`) is still no
+# gap, as `blue.The` is none. The CJK form skips format characters before its
+# lookahead, so `。\u200b」` keeps the closer as `。」` does.
 _CLOSERS = SENTENCE_CLOSERS  # shared with the rewriter (#320)
+_FORMAT = re.escape(FORMAT_CHARACTERS)
 _CJK_TERMINATORS = "。！？｡"
 _MARKER = r"\[cite:[^\]]+\]"
 _SENTENCE_SPLIT = re.compile(
-    rf"[{re.escape(_TERMINATORS)}]+(?:[{re.escape(_CLOSERS)}]|{_MARKER})*(?P<gap>\s+)"
-    rf"|[{_CJK_TERMINATORS}]+(?:{_MARKER})*(?P<cjk>)(?=[^\s{re.escape(_CLOSERS)}\[])"
+    rf"[{re.escape(_TERMINATORS)}]+(?:[{re.escape(_CLOSERS)}{_FORMAT}]|{_MARKER})*"
+    rf"(?P<gap>\s[\s{_FORMAT}]*)"
+    rf"|[{_CJK_TERMINATORS}]+(?:{_MARKER}|[{_FORMAT}])*(?P<cjk>)"
+    rf"(?=[^\s{re.escape(_CLOSERS)}{_FORMAT}\[])"
 )
 
 # A line or paragraph break was never a boundary: only a terminator split, so a
@@ -119,10 +132,29 @@ _SENTENCE_SPLIT = re.compile(
 # items and headings, so the lookahead first skips any `>` prefix. Without it
 # `> claim\n>\n> cited [cite:x]` was one sentence. `_QUOTE_PREFIX` is that
 # prefix, and `_QUOTE_BLANK` a line that is blank once it is removed.
-_QUOTE_PREFIX = re.compile(r"(?:[ \t]*>)*")
-_QUOTE_BLANK = re.compile(r"[ \t>]*")
+#
+# Every line-start read below uses one blank rule (#435): a format character
+# (`_FORMAT`, category Cf) reads as nothing wherever it sits, even inside a
+# marker (`1\u200b2.`), and any whitespace other than `\n` (NBSP, U+3000, ...)
+# reads as a space. The splitter's gap already took both (#433), so it found a
+# sentence end at `\n1.\u200b The` or `\n1.\xa0The`, the `_ORDERED_MARKER` skip
+# dropped it as a numbered item, and the break regex, wanting `[ \t]`, did not
+# read a list item either: neither cut, and the uncited claim above rode the
+# item's marker. So `-\u200b item` is a list item as `- item` is, `-\u200bitem`
+# is not as `-item` is not, and a line of only Cf or NBSP is a blank line.
+_LINE_SPACE = r"[^\S\n]"  # whitespace that does not end the line
+_LINE_FORMAT = rf"[{_FORMAT}]"
+_LINE_BLANK = rf"(?:{_LINE_SPACE}|{_LINE_FORMAT})"
+# A list marker or ATX heading mark, then the blank run in front of its text
+# (a format character alone is no space, as `-item` is no item). Each format
+# run has one place it can match, so a long one cannot backtrack quadratically.
+_LINE_DIGITS = rf"\d(?:{_LINE_FORMAT}*\d){{0,8}}"
+_LINE_MARKER = rf"(?:[-*+]|{_LINE_DIGITS}{_LINE_FORMAT}*[.)]|#(?:{_LINE_FORMAT}*#){{0,5}})"
+_MARKER_SPACE = rf"{_LINE_FORMAT}*{_LINE_SPACE}"
+_QUOTE_PREFIX = re.compile(rf"(?:{_LINE_BLANK}*>)*")
+_QUOTE_BLANK = re.compile(rf"(?:{_LINE_BLANK}|>)*")
 _STRUCTURAL_BREAK = re.compile(
-    r"\n(?=(?:[ \t]*>)*[ \t]*(?:\n|(?:[-*+]|\d{1,9}[.)])[ \t]|#{1,6}[ \t]))"
+    rf"\n(?=(?:{_LINE_BLANK}*>)*{_LINE_BLANK}*(?:\n|{_LINE_MARKER}{_MARKER_SPACE}))"
 )
 # The text in front of a break that it does NOT cut after (#385): a heading line,
 # or a lead-in ending in `:` ("Key Postgres settings:"). Neither got its own
@@ -138,13 +170,16 @@ _STRUCTURAL_BREAK = re.compile(
 # it each of those lines was cut off as its own uncited sentence and a fully
 # cited list under it refused. A colon mid-line (`Key: settings are`) is still
 # not one, and neither is a bold label with no colon (`**Key settings**`, #389).
-_HEADING_LINE = re.compile(r"[ \t]{0,3}#{1,6}[ \t].*")
-_LEAD_IN = re.compile(rf".*[:：][{re.escape(_CLOSERS)}]*[ \t]*")
+_HEADING_LINE = re.compile(
+    rf"{_LINE_FORMAT}*(?:{_LINE_SPACE}{_LINE_FORMAT}*){{0,3}}"
+    rf"#(?:{_LINE_FORMAT}*#){{0,5}}{_MARKER_SPACE}.*"
+)
+_LEAD_IN = re.compile(rf".*[:：][{re.escape(_CLOSERS)}{_FORMAT}]*(?:{_LINE_SPACE}{_LINE_FORMAT}*)*")
 # An ordered-list marker at the start of a line (`1. item`). `_SENTENCE_SPLIT`
 # reads its `.` plus space as a sentence end, so `'1.'` was cut off as a
 # fragment and, holding a digit, refused a fully cited numbered list (#385).
 # Behind a blockquote prefix too (`> 1. item`, #391).
-_ORDERED_MARKER = re.compile(r"(?:[ \t]*>)*[ \t]*\d{1,9}")
+_ORDERED_MARKER = re.compile(rf"(?:{_LINE_BLANK}*>)*{_LINE_BLANK}*{_LINE_DIGITS}{_LINE_FORMAT}*")
 
 # Tokens that end in a period but are NOT sentence boundaries. The `_SENTENCE_SPLIT`
 # regex treats every period-then-whitespace as a boundary, so an ordinary
@@ -494,7 +529,9 @@ def _ends_with_abbreviation(fragment: str, following: str = "") -> bool:
     tokens = fragment.split()
     if not tokens:
         return False
-    last = tokens[-1].rstrip(".")
+    # A format character after the dot is read as nothing, so `Dr.\u200b Smith`
+    # stays one sentence as `Dr. Smith` does (#431).
+    last = tokens[-1].rstrip("." + FORMAT_CHARACTERS)
     if not last:
         return False
     if last.lower() in _ABBREVIATIONS:
@@ -681,9 +718,12 @@ def split_sentences(text: str) -> list[str]:
 # `FAQ.).` end in a terminator AFTER the closer, so a tail anchored on closers
 # matched nothing, the strip took only the last `.`, and the marker landed after
 # `?"` -- where the splitter cut the claim from it again.
+# A format character may sit anywhere in that run, as in the splitter's (#431),
+# but only a real closer makes it a tail: `blue.\u200b` is stripped like
+# `blue.`, and `go.\u200b"` keeps its marker in front of `.\u200b"`.
 _TERMINATOR_THEN_CLOSERS = re.compile(
-    rf"[{re.escape(_TERMINATORS)}]+[{re.escape(_CLOSERS)}]+"
-    rf"[{re.escape(_TERMINATORS + _CLOSERS)}]*$"
+    rf"[{re.escape(_TERMINATORS)}]+[{_FORMAT}]*[{re.escape(_CLOSERS)}]"
+    rf"[{re.escape(_TERMINATORS + _CLOSERS)}{_FORMAT}]*$"
 )
 
 # What `_STRUCTURAL_BREAK` reads at the start of a line (#399): `>` quote
@@ -692,9 +732,12 @@ _TERMINATOR_THEN_CLOSERS = re.compile(
 # writes the template prefix after it, and `TemplateGenerator.generate` starts
 # such a sentence on its own line, so the #385/#391 line-start reads see the
 # same heading, numbered item or quote in the answer as in the chunk.
-_BLOCK_PREFIX = re.compile(r"(?:[ \t]*(?:>|(?:[-*+]|\d{1,9}[.)]|#{1,6})(?=[ \t])))*[ \t]*")
+# The same blank rule as those reads (#435).
+_BLOCK_PREFIX = re.compile(
+    rf"(?:{_LINE_BLANK}*(?:>|{_LINE_MARKER}(?={_MARKER_SPACE})))*{_LINE_BLANK}*"
+)
 # A line holding only such a marker, which one more space turns into a break.
-_BARE_BLOCK_MARKER = re.compile(r"(?:[ \t]*>)*[ \t]*(?:[-*+]|\d{1,9}[.)]|#{1,6})")
+_BARE_BLOCK_MARKER = re.compile(rf"(?:{_LINE_BLANK}*>)*{_LINE_BLANK}*{_LINE_MARKER}{_LINE_FORMAT}*")
 
 
 def _template_sentence(sentence: str, external_id: str) -> str:
@@ -733,7 +776,7 @@ def _template_sentence(sentence: str, external_id: str) -> str:
     # And any whitespace the strip exposed, with the terminators behind it
     # (#399): `30.\n ?` left `30.\n `, so the marker sat after a blank line
     # (a break) or `30.` became a mid-line sentence end, uncited either way.
-    head = head.rstrip(_TERMINATORS + " \t\r\n")
+    head = head.rstrip(_TERMINATORS + FORMAT_CHARACTERS + " \t\r\n")
     body = f"{lead}Per the retrieved context, {head}"
     text = f"{body}{_marker_gap(body)}{marker}{end}"
     if all(_CITE_PATTERN.search(part) for part in split_sentences(text)):
@@ -763,7 +806,7 @@ def _cite_every_cut(text: str, marker: str) -> str:
     """
     lines = text.replace("\r\n", " \n").replace("\r", "\n")  # as `split_sentences`
     spots = {m.start() for m in _SENTENCE_SPLIT.finditer(lines)}
-    for m in re.finditer(r"[ \t]*\n", lines):
+    for m in re.finditer(rf"{_LINE_BLANK}*\n", lines):
         line = lines[lines.rfind("\n", 0, m.start()) + 1 : m.start()]
         if not _QUOTE_BLANK.fullmatch(line):
             spots.add(m.start())

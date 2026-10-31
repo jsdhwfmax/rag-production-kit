@@ -4542,3 +4542,96 @@ context_for_next_session:
 decisions_made: []
 followups: []
 ---
+
+---
+session: 2026-10-30T07:20Z
+issue: 427
+branch: session/2026-10-29-0807-issue-427
+focus: TEMPLATE_REWRITER_NORM_KEPT_A_CF_CHARACTER_BESIDE_A_SPACE_OR_AT_AN_END_SO_A_ZERO_WIDTH_THEN_STEP_BUILT_A_REWRITE_RESULT_ITS_OWN_CONSTRUCTOR_REFUSES
+phase: shipped
+delta:
+  files_changed: 2
+  tests_added: 258
+  suite: "3691 passed 7 skipped (after commit); ruff check + format clean"
+decisions_made: []
+measured: "origin/main 8ef52f0: rewrite('What is RAG. Then \\u200b') and ('What is RAG. Then, \\ufeff') -> ValueError sub_queries[1]; 'Compare RAG with \\u200b' -> ('What is RAG?','What is \\u200b?'). _BLANK x 25 split templates = 225 cases: 12 raise, 88 more differ from the ' ' twin. After: 0 / 0. Revert (rewriter.py == main, pycache cleared): 104 red / 154 green (125 whitespace-row or already-equal twin arms, 25 twin-pin controls, 4 in-word Cf controls). Resumed from the interrupted 2026-10-29 draft: rebased onto 8ef52f0, literal ZWNJ/soft-hyphen/ZWJ in the test source replaced with escapes, docstring counts corrected to the file's own 225-case table. PR #430."
+context_for_next_session:
+  - "REWRITER_NORM_IS_A_RUN_SCANNER_a_blank_run_with_whitespace_or_at_an_end_is_a_separator_a_Cf_only_run_inside_a_word_is_kept"
+  - "PUNCTUATION_ONLY_THEN_STEP_STILL_BECOMES_A_DOT_SUB_QUERY_same_as_its_whitespace_twin_not_blank_by_is_blank"
+followups: []
+---
+
+---
+session: 2026-10-30T07:27Z
+issue: 431
+branch: session/2026-10-30-0727-issue-431
+focus: GENERATOR_SENTENCE_SPLIT_GAP_HAD_TO_START_WITH_WHITESPACE_SO_A_CF_CHARACTER_BETWEEN_THE_FULL_STOP_AND_THE_SPACE_HID_THE_BOUNDARY_AND_AN_UNCITED_CLAIM_PASSED
+phase: shipped
+delta:
+  files_changed: 4
+  tests_added: 245
+  suite: "3936 passed 7 skipped (after commit, py3.11 and py3.12); ruff check + format clean"
+decisions_made: []
+measured: "origin/main f9f433e: enforce_citations('Paris is in Germany.{gap}The sky is blue [cite:a].') ACCEPT for gap '\\u200b ', '\\ufeff ', '\\u2060 ', '\\u00ad ' (REFUSE for ' ' and ' \\u200b'); rewrite('What is RAG.\\u200b\"  Then what is BM25') -> no_decomposition (twin sequential). After: all REFUSE; sequential_then_pattern. New table: 6 Cf rows x (18 split + 8 round-trip + 10 rewriter shapes) vs the empty-slot twin, 28 twin-pin controls, 1 catalog check = 245. Revert (text/generator/rewriter == main, pycache cleared): 133 red / 112 green (28 controls + 84 rows main already matched). PR #433."
+context_for_next_session:
+  - "TEXT_FORMAT_CHARACTERS_IS_THE_CATALOG_CF_SET_the_splitters_read_a_Cf_in_the_closer_run_or_gap_as_nothing"
+  - "SENTENCE_SPLIT_GAP_IS_A_BLANK_RUN_WITH_AT_LEAST_ONE_WHITESPACE_a_Cf_only_gap_is_still_no_gap"
+  - "REWRITER_THEN_GAP_STAYS_BACKSLASH_S_PLUS_because_it_runs_on_norm_output"
+followups: []
+---
+
+---
+session: 2026-10-30T07:41Z
+issue: 432
+branch: session/2026-10-30-0741-issue-432
+focus: ATOMIC_WRITE_TEXT_RENAMED_OVER_A_READ_ONLY_0444_TARGET_NOW_EACCES_LIKE_PATH_WRITE_TEXT_AND_WRITE_RUNS_PREFLIGHTS_ALL_THREE_SUITE_FILES
+phase: shipped
+delta:
+  files_changed: 3
+  tests_added: 13
+  suite: "3949 passed 7 skipped (after commit, py3.11 and py3.12); ruff check + format clean"
+decisions_made: []
+measured: "origin/main df93d6b (macOS uid 502): atomic_write_text on a 0444 file -> no error, contents 'new', mode still 0444; Path.write_text -> PermissionError(13). Writer fix alone: run_eval.main([]) with a 0444 correctness.json -> rc 2 but faithfulness.json and recall_at_5.json already rewritten. After: EACCES / exit 2, all files byte-identical, no .tmp. Revert (io_utils + run_eval == main, no-op check_writable stub, pycache cleared): 9 of 13 red, 4 green = 2 write_text parity + 2 writable/missing controls; run_eval-only revert: 2 red (recall_at_5, correctness), faithfulness arm green as control. PR #434."
+context_for_next_session:
+  - "_refuse_unwritable_target_RUNS_AFTER_THE_SYMLINK_RESOLVE_BEFORE_THE_TEMP_os_stat_then_os_access_W_OK_root_still_writes_port_of_prompt_regression_suite_318"
+  - "IO_UTILS_CHECK_WRITABLE_IS_NEW_file_mode_only_parent_problems_already_fail_on_the_first_write"
+  - "WRITE_RUNS_CHECKS_ALL_THREE_SUITE_FILES_BEFORE_WRITING_ANY_it_is_the_only_multi_file_writer"
+followups: []
+---
+
+---
+session: 2026-10-30T08:16Z
+issue: 435
+branch: session/2026-10-30-0805-issue-435
+focus: LINE_START_READERS_WANTED_SPACE_OR_TAB_SO_A_CF_OR_NBSP_AFTER_A_LINE_START_1_DOT_WAS_SKIPPED_AS_A_NUMBERED_ITEM_BY_THE_SPLITTER_BUT_NOT_READ_AS_ONE_BY_THE_BREAK_AND_AN_UNCITED_CLAIM_PASSED
+phase: shipped
+delta:
+  files_changed: 2
+  tests_added: 171
+  suite: "4120 passed 7 skipped (after commit, py3.11 and py3.12); ruff check + format clean"
+decisions_made: []
+measured: "origin/main a2c0736: enforce_citations('Paris is in Germany\\n1.\\u200b The sky is blue [cite:a].') ACCEPT (twin REFUSE), same for '\\n1.\\xa0', '\\n1)\\u3000'; 'Key settings:\\u200b\\n- ...' and '##\\u200b Settings\\n- ...' REFUSE (twins ACCEPT). Sweep: line-start constructs x slot positions x 10 blank classes x space/newline context: 247/2060 verdicts and 417/1000 TemplateGenerator round trips differ from the Cf-dropped, whitespace-as-space twin; after 0/0, no exclusion. New tests 171 (103 verdict + 50 round-trip shapes looping blanks x contexts, 12 twin controls, 6 issue rows). Revert (generator.py == main, pycache cleared): 86 red / 85 green (12 controls + 73 shapes main already matched). A first draft's _LEAD_IN backtracked 6.2s on a 20k-Cf line; made each Cf run unambiguous (<0.07s). PR #437."
+context_for_next_session:
+  - "LINE_START_BLANK_RULE_IS_ONE_SET_OF_FRAGMENTS_LINE_SPACE_LINE_FORMAT_LINE_BLANK_LINE_MARKER_MARKER_SPACE_shared_by_reader_and_writer"
+  - "A_CF_RUN_IN_A_LINE_START_REGEX_MUST_HAVE_ONE_PLACE_TO_MATCH_or_a_long_run_backtracks_quadratically"
+  - "TEMPLATE_HEAD_RSTRIP_STRIPS_ONLY_SPACE_TAB_CR_LF_so_1_NBSP_DOT_keeps_the_NBSP_before_the_marker_cosmetic_verdict_equal"
+followups: []
+---
+
+---
+session: 2026-10-30T08:20Z
+issue: 436
+branch: session/2026-10-30-0820-issue-436
+focus: CHECK_WRITABLE_NOW_REFUSES_A_DIRECTORY_TARGET_AND_AN_UNWRITABLE_RESOLVED_PARENT_SO_WRITE_RUNS_PREFLIGHT_CATCHES_THEM_BEFORE_ANY_SUITE_FILE_IS_REPLACED
+phase: shipped
+delta:
+  files_changed: 2
+  tests_added: 13
+  suite: "4133 passed 7 skipped (after commit, py3.11 and py3.12); ruff check + format clean"
+decisions_made: []
+measured: "origin/main a578284 (macOS uid 502): run_eval.main([]) with correctness.json a directory -> rc 2 Errno 21 at the rename, faithfulness.json + recall_at_5.json already rewritten; correctness.json a symlink to a file in a 0555 dir -> rc 2 Errno 13 on the temp file, same two rewritten; symlink loop control -> rc 2 Errno 62, nothing written. After: all three rc 2 with every sibling byte-identical. Revert (io_utils == main, pycache cleared): 9 of 13 red, 4 green = file-in-chain + loop controls (existing os.stat raises) and the two [faithfulness] run_eval arms (first write fails before any replace). PR #438."
+context_for_next_session:
+  - "CHECK_WRITABLE_ONLY_atomic_write_text_UNCHANGED_it_already_raised_each_error_just_after_siblings_were_replaced"
+  - "PARENT_CHECK_IS_ON_THE_NEAREST_EXISTING_ANCESTOR_OF_THE_RESOLVED_TARGET_W_OK_or_X_OK_and_applies_to_EXISTING_targets_too_because_the_temp_file_goes_beside_the_resolved_file"
+followups: []
+---

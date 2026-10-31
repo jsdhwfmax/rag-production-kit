@@ -3947,3 +3947,70 @@ PR #429.
 **Open questions / blockers:** Required hosted checks remain pending; prior Windows collection and runtime baseline limits are still disclosed. No full-suite success is claimed.
 
 **Next session:** Inspect exact-head CI and maintainer feedback. Codex assisted; no separate public comments or automatic merge were made.
+
+## 2026-10-30 — The template rewriter never keeps a zero-width step (#427)
+
+The blank-query fix in #425 made a rewrite refuse a blank sub-query, but the
+template rewriter could still build one. It tidied a query by collapsing
+spaces, but it left an invisible character such as a zero-width space or a
+byte-order mark that sat next to a space or at either end. A query that ended
+in "Then" plus a zero-width space raised an error instead of searching. The
+same leftovers turned "Compare RAG with" plus a zero-width space into a
+question about an invisible word. The tidy-up step now treats those invisible
+characters like spaces when they sit beside a space or at an end. It still
+keeps them inside a word, where they matter (a Persian zero-width non-joiner,
+a soft hyphen, an emoji joiner). Every split shape is now tested against nine
+kinds of blank, and each result must match what a plain space gives. PR #430.
+
+## 2026-10-30 — An invisible character after a full stop no longer hides a sentence end (#431)
+
+The citation check splits an answer into sentences and makes each one carry its
+own citation, so an uncited claim cannot borrow the next sentence's. The
+splitter only saw a sentence end when a space came straight after the full stop
+(and any closing quote). An invisible character in between, such as a
+zero-width space or a byte-order mark, hid the end, so "Paris is in Germany."
+followed by a cited sentence was accepted. The splitter now reads those
+invisible characters as nothing when they sit beside a full stop, a closing
+quote or the space, the same rule #430 gave the query rewriter. The list of
+invisible characters is built from Python's Unicode catalog rather than
+written by hand. The query rewriter's own sentence checks follow the same rule,
+and every case is tested against the same text without the invisible character.
+PR #433.
+
+## 2026-10-30 — A read-only output file is no longer silently overwritten (#432)
+
+Every write goes through a helper that writes a temporary file and renames it
+over the target, so an interrupted write cannot leave a half-written file. A
+rename only needs permission on the directory, though, so a file made
+read-only with `chmod 444` was rewritten anyway. A plain file write refuses in
+that case, and the eval and benchmark scripts already documented an unwritable
+output as an error with exit 2. The helper now checks that an existing target
+is writable before it starts. The eval script writes three result files in a
+row, so it now checks all three first. Before that, a read-only last file was
+refused only after the other two had been replaced. New files and writable
+files behave as before. PR #434.
+
+## 2026-10-30 — An invisible character after a line-start "1." no longer hides a list item (#435)
+
+The citation check also cuts an answer at markdown line starts: a list item, a
+heading, a blank line. After #433, the sentence splitter saw an end at a
+line-start "1." followed by a zero-width space or a non-breaking space. It then
+dropped that end, reading the "1." as a numbered item. The line-start check
+wanted a plain space or tab after the marker, so it did not see a list item
+either, and an uncited claim on the line above passed. Every line-start check,
+in the validator and in the template writer, now uses one rule: an invisible
+format character counts as nothing, and any space-like character counts as a
+space. A sweep of every line-start shape, ten kinds of blank and both a space
+and a newline in front found 247 disagreements with the plain-space version
+before the fix and none after. PR #437.
+
+## 2026-10-30 — The eval pre-flight also catches a directory or a link into a read-only folder (#436)
+
+Before writing its three result files, the eval script checks each one can be
+written, so a bad target is refused before any file is replaced. That check
+only looked at whether the file itself was read-only. If a result file was
+actually a directory, or a link into a read-only folder, the check passed and
+the write failed partway, after the first two files had already been
+overwritten. The check now refuses a directory, and it confirms the folder the
+file really lives in (after following links) can be written to. Ordinary files
+behave as before. PR #438.
